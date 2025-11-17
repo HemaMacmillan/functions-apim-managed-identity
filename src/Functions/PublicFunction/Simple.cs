@@ -1,7 +1,6 @@
 using System;
 using System.Net.Http;
 using System.Net.Http.Headers;
-using System.Text.Json;
 using System.Threading.Tasks;
 using Azure.Core;
 using Azure.Identity;
@@ -28,61 +27,75 @@ namespace PublicFunction
             FunctionContext context)
         {
             var log = context.GetLogger("simple");
-        
-            // Check if APIM settings exist
+
+            // ----------------------------
+            // ENVIRONMENT VARIABLES
+            // ----------------------------
             string apimUrl = Environment.GetEnvironmentVariable("ApimUrl");
             string apimKey = Environment.GetEnvironmentVariable("ApimKey");
             string clientId = Environment.GetEnvironmentVariable("ClientId");
-        
-            bool apimConfigured = 
+            string targetAppUri = Environment.GetEnvironmentVariable("TargetAppUri");
+
+            // ----------------------------
+            // TEST MODE (NO APIM CONFIG)
+            // ----------------------------
+            bool apimConfigured =
                 !string.IsNullOrWhiteSpace(apimUrl) &&
-                !string.IsNullOrWhiteSpace(apimKey);
-        
+                !string.IsNullOrWhiteSpace(apimKey) &&
+                !string.IsNullOrWhiteSpace(targetAppUri);
+
             if (!apimConfigured)
             {
-                log.LogWarning("APIM settings missing. Running in TEST MODE.");
+                log.LogWarning("APIM env variables missing. Running in TEST MODE.");
+
                 var testResponse = req.CreateResponse(System.Net.HttpStatusCode.OK);
-                testResponse.WriteString("Simple function running in test mode (APIM not configured).");
+                await testResponse.WriteStringAsync("Simple function running in TEST MODE (APIM not configured).");
+
                 return testResponse;
             }
-        
-            // -----------------------
-            // PRODUCTION MODE (APIM)
-            // -----------------------
+
+            // ----------------------------
+            // PRODUCTION MODE (APIM + MSI)
+            // ----------------------------
             try
             {
-                var options = new DefaultAzureCredentialOptions();
-        
+                log.LogInformation("APIM configured. Attempting MSI token retrieval...");
+
+                var credentialOptions = new DefaultAzureCredentialOptions();
                 if (!string.IsNullOrWhiteSpace(clientId))
-                    options.ManagedIdentityClientId = clientId;
-        
-                var credential = new DefaultAzureCredential(options);
-        
+                    credentialOptions.ManagedIdentityClientId = clientId;
+
+                var credential = new DefaultAzureCredential(credentialOptions);
+
+                // Correct MSI scope MUST be the target app
                 var token = await credential.GetTokenAsync(
-                    new TokenRequestContext(new[] { "https://management.azure.com/.default" }));
-        
-                var http = new HttpClient();
-                http.DefaultRequestHeaders.Authorization = 
+                    new TokenRequestContext(new[] { $"{targetAppUri}/.default" })
+                );
+
+                _httpClient.DefaultRequestHeaders.Authorization =
                     new AuthenticationHeaderValue("Bearer", token.Token);
-                http.DefaultRequestHeaders.Add("Ocp-Apim-Subscription-Key", apimKey);
-        
-                var fullUrl = $"{apimUrl}/trusted-simple/test";
-        
-                log.LogInformation($"Calling APIM URL: {fullUrl}");
-        
-                var result = await http.GetAsync(fullUrl);
-                var content = await result.Content.ReadAsStringAsync();
-        
+
+                _httpClient.DefaultRequestHeaders.Add("Ocp-Apim-Subscription-Key", apimKey);
+
+                string callUrl = $"{apimUrl}/trusted-simple/test";
+                log.LogInformation($"Calling APIM endpoint: {callUrl}");
+
+                var result = await _httpClient.GetAsync(callUrl);
+                var body = await result.Content.ReadAsStringAsync();
+
                 var response = req.CreateResponse(result.StatusCode);
-                await response.WriteStringAsync(content);
+                await response.WriteStringAsync(body);
+
                 return response;
             }
             catch (Exception ex)
             {
-                log.LogError(ex, "APIM call failed. Returning fallback.");
-                var error = req.CreateResponse(System.Net.HttpStatusCode.InternalServerError);
-                error.WriteString($"Error calling APIM: {ex.Message}");
-                return error;
+                log.LogError(ex, "APIM call failed.");
+
+                var errorResponse = req.CreateResponse(System.Net.HttpStatusCode.InternalServerError);
+                await errorResponse.WriteStringAsync($"APIM error: {ex.Message}");
+
+                return errorResponse;
             }
         }
     }

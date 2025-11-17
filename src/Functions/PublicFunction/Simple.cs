@@ -24,69 +24,66 @@ namespace PublicFunction
 
         [Function("simple")]
         public async Task<HttpResponseData> Run(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "get", "post")] HttpRequestData req)
+            [HttpTrigger(AuthorizationLevel.Anonymous, "get")] HttpRequestData req,
+            FunctionContext context)
         {
-            _logger.LogInformation("Starting function call");
-
-            var clientId = Environment.GetEnvironmentVariable("ClientId");
-            var apiKey   = Environment.GetEnvironmentVariable("ApimKey");
-            var apiUrl   = $"{Environment.GetEnvironmentVariable("ApimUrl")}/trusted-simple/test";
-
-            _logger.LogInformation($"API Url: {apiUrl}");
-
-            string jwt = string.Empty;
-
+            var log = context.GetLogger("simple");
+        
+            // Check if APIM settings exist
+            string apimUrl = Environment.GetEnvironmentVariable("ApimUrl");
+            string apimKey = Environment.GetEnvironmentVariable("ApimKey");
+            string clientId = Environment.GetEnvironmentVariable("ClientId");
+        
+            bool apimConfigured = 
+                !string.IsNullOrWhiteSpace(apimUrl) &&
+                !string.IsNullOrWhiteSpace(apimKey);
+        
+            if (!apimConfigured)
+            {
+                log.LogWarning("APIM settings missing. Running in TEST MODE.");
+                var testResponse = req.CreateResponse(System.Net.HttpStatusCode.OK);
+                testResponse.WriteString("Simple function running in test mode (APIM not configured).");
+                return testResponse;
+            }
+        
+            // -----------------------
+            // PRODUCTION MODE (APIM)
+            // -----------------------
             try
             {
                 var options = new DefaultAzureCredentialOptions();
-
+        
                 if (!string.IsNullOrWhiteSpace(clientId))
                     options.ManagedIdentityClientId = clientId;
-
+        
                 var credential = new DefaultAzureCredential(options);
-
+        
                 var token = await credential.GetTokenAsync(
-                    new TokenRequestContext(new[] { "https://management.azure.com/.default" })
-                );
-
-                jwt = token.Token;
-                _logger.LogInformation("Got the JWT");
+                    new TokenRequestContext(new[] { "https://management.azure.com/.default" }));
+        
+                var http = new HttpClient();
+                http.DefaultRequestHeaders.Authorization = 
+                    new AuthenticationHeaderValue("Bearer", token.Token);
+                http.DefaultRequestHeaders.Add("Ocp-Apim-Subscription-Key", apimKey);
+        
+                var fullUrl = $"{apimUrl}/trusted-simple/test";
+        
+                log.LogInformation($"Calling APIM URL: {fullUrl}");
+        
+                var result = await http.GetAsync(fullUrl);
+                var content = await result.Content.ReadAsStringAsync();
+        
+                var response = req.CreateResponse(result.StatusCode);
+                await response.WriteStringAsync(content);
+                return response;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error getting token");
+                log.LogError(ex, "APIM call failed. Returning fallback.");
+                var error = req.CreateResponse(System.Net.HttpStatusCode.InternalServerError);
+                error.WriteString($"Error calling APIM: {ex.Message}");
+                return error;
             }
-
-            // Add headers
-            _httpClient.DefaultRequestHeaders.Authorization =
-                new AuthenticationHeaderValue("Bearer", jwt);
-
-            _httpClient.DefaultRequestHeaders.Add("Ocp-Apim-Subscription-Key", apiKey);
-
-            // Call APIM
-            var result  = await _httpClient.GetAsync(apiUrl);
-            var content = await result.Content.ReadAsStringAsync();
-
-            _logger.LogInformation("Completed the APIM call");
-
-            var response = req.CreateResponse(result.IsSuccessStatusCode ?
-                                              System.Net.HttpStatusCode.OK :
-                                              System.Net.HttpStatusCode.BadRequest);
-
-            if (result.IsSuccessStatusCode)
-            {
-                var obj = JsonSerializer.Deserialize<TestResponse>(content,
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
-                await response.WriteAsJsonAsync(obj);
-            }
-            else
-            {
-                _logger.LogError($"Error making API call: {content}");
-                await response.WriteStringAsync(content);
-            }
-
-            return response;
         }
     }
 }

@@ -24,71 +24,98 @@ namespace PublicFunction
 
         [Function("group")]
         public async Task<HttpResponseData> Run(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "get", "post")] HttpRequestData req)
+            [HttpTrigger(AuthorizationLevel.Anonymous, "get", "post")] HttpRequestData req,
+            FunctionContext context)
         {
-            _logger.LogInformation("Starting function call");
+            var log = context.GetLogger("group");
+            log.LogInformation("Starting function call");
 
+            // ----------------------------
+            // ENVIRONMENT VARIABLES
+            // ----------------------------
             var clientId     = Environment.GetEnvironmentVariable("ClientId");
             var targetAppUri = Environment.GetEnvironmentVariable("TargetAppUri");
             var tenantId     = Environment.GetEnvironmentVariable("TenantId");
             var apiKey       = Environment.GetEnvironmentVariable("ApimKey");
-            var apiUrl       = $"{Environment.GetEnvironmentVariable("ApimUrl")}/trusted-group/test";
+            var apimUrl      = Environment.GetEnvironmentVariable("ApimUrl");
 
-            _logger.LogInformation($"API Url: {apiUrl}");
-            _logger.LogInformation($"App Uri: {targetAppUri}");
+            // ----------------------------
+            // TEST MODE (NO APIM SETTINGS)
+            // ----------------------------
+            bool apimConfigured =
+                !string.IsNullOrWhiteSpace(apiKey) &&
+                !string.IsNullOrWhiteSpace(apimUrl) &&
+                !string.IsNullOrWhiteSpace(targetAppUri);
 
+            if (!apimConfigured)
+            {
+                log.LogWarning("APIM environment settings missing. Running in TEST MODE.");
+
+                var testResponse = req.CreateResponse(System.Net.HttpStatusCode.OK);
+                await testResponse.WriteStringAsync("Group function running in TEST MODE (APIM not configured).");
+
+                return testResponse;
+            }
+
+            // ----------------------------
+            // PRODUCTION MODE (MSI + APIM)
+            // ----------------------------
             string jwt = string.Empty;
 
             try
             {
-                var options = new DefaultAzureCredentialOptions();
+                log.LogInformation("APIM configured. Attempting MSI token retrieval...");
 
+                var options = new DefaultAzureCredentialOptions();
                 if (!string.IsNullOrWhiteSpace(clientId))
                     options.ManagedIdentityClientId = clientId;
 
                 var credential = new DefaultAzureCredential(options);
 
-                // Request token for downstream API
                 var token = await credential.GetTokenAsync(
                     new TokenRequestContext(new[] { $"{targetAppUri}/.default" })
                 );
 
                 jwt = token.Token;
 
-                _logger.LogInformation("Got the JWT");
+                log.LogInformation("MSI token successfully retrieved.");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error getting token");
+                log.LogError(ex, "Error retrieving MSI token.");
             }
 
-            // Add headers
+            // ----------------------------
+            // CALL APIM
+            // ----------------------------
             _httpClient.DefaultRequestHeaders.Authorization =
                 new AuthenticationHeaderValue("Bearer", jwt);
 
             _httpClient.DefaultRequestHeaders.Add("Ocp-Apim-Subscription-Key", apiKey);
 
-            // Call APIM
-            var result  = await _httpClient.GetAsync(apiUrl);
+            string fullUrl = $"{apimUrl}/trusted-group/test";
+            log.LogInformation($"Calling APIM endpoint: {fullUrl}");
+
+            var result = await _httpClient.GetAsync(fullUrl);
             var content = await result.Content.ReadAsStringAsync();
 
-            _logger.LogInformation("Completed the APIM call");
+            log.LogInformation("Completed APIM call.");
 
-            var response = req.CreateResponse(
-                result.IsSuccessStatusCode ?
-                System.Net.HttpStatusCode.OK :
-                System.Net.HttpStatusCode.BadRequest);
+            var response = req.CreateResponse(result.IsSuccessStatusCode
+                ? System.Net.HttpStatusCode.OK
+                : System.Net.HttpStatusCode.BadRequest);
 
             if (result.IsSuccessStatusCode)
             {
-                var obj = JsonSerializer.Deserialize<TestResponse>(content,
+                var obj = JsonSerializer.Deserialize<TestResponse>(
+                    content,
                     new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
                 await response.WriteAsJsonAsync(obj);
             }
             else
             {
-                _logger.LogError($"Error making API call: {content}");
+                log.LogError($"APIM call error: {content}");
                 await response.WriteStringAsync(content);
             }
 

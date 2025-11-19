@@ -93,7 +93,8 @@ namespace PublicFunction
 
             _httpClient.DefaultRequestHeaders.Add("Ocp-Apim-Subscription-Key", apiKey);
 
-            string fullUrl = $"{apimUrl}/trusted-group/test";
+            //string fullUrl = $"{apimUrl}/trusted-group/test";
+            string fullUrl = $"{apimUrl}/group";
             log.LogInformation($"Calling APIM endpoint: {fullUrl}");
 
             var result = await _httpClient.GetAsync(fullUrl);

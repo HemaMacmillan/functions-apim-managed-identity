@@ -77,7 +77,8 @@ namespace PublicFunction
 
                 _httpClient.DefaultRequestHeaders.Add("Ocp-Apim-Subscription-Key", apimKey);
 
-                string callUrl = $"{apimUrl}/trusted-simple/test";
+                //string callUrl = $"{apimUrl}/trusted-simple/test";
+                string callUrl = $"{apimUrl}/simple";
                 log.LogInformation($"Calling APIM endpoint: {callUrl}");
 
                 var result = await _httpClient.GetAsync(callUrl);

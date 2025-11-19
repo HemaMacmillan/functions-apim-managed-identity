@@ -91,6 +91,7 @@ namespace PublicFunction
             _httpClient.DefaultRequestHeaders.Authorization =
                 new AuthenticationHeaderValue("Bearer", jwt);
 
+            _httpClient.DefaultRequestHeaders.Remove("Ocp-Apim-Subscription-Key");
             _httpClient.DefaultRequestHeaders.Add("Ocp-Apim-Subscription-Key", apiKey);
 
             //string fullUrl = $"{apimUrl}/trusted-group/test";

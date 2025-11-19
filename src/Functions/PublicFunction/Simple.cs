@@ -75,6 +75,7 @@ namespace PublicFunction
                 _httpClient.DefaultRequestHeaders.Authorization =
                     new AuthenticationHeaderValue("Bearer", token.Token);
 
+                _httpClient.DefaultRequestHeaders.Remove("Ocp-Apim-Subscription-Key");
                 _httpClient.DefaultRequestHeaders.Add("Ocp-Apim-Subscription-Key", apimKey);
 
                 //string callUrl = $"{apimUrl}/trusted-simple/test";

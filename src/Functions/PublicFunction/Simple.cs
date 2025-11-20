@@ -80,9 +80,13 @@ namespace PublicFunction
                 _httpClient.DefaultRequestHeaders.Remove("Ocp-Apim-Subscription-Key");
                 _httpClient.DefaultRequestHeaders.Add("Ocp-Apim-Subscription-Key", apimKey);
 
+                //Get the parameter 
+                var query = System.Web.HttpUtility.ParseQueryString(req.Url.Query);
+                string mode = query["mode"] ?? "novalue";
+                
                 //string callUrl = $"{apimUrl}/trusted-simple/test";
-                string callUrl = $"{funcUrl}/api/group";
                 //string callUrl = "https://func-apim-mi-week2-dbdgcba2hrffdbcx.eastus-01.azurewebsites.net/api/group";
+                string callUrl = $"{funcUrl}/api/group?mode={mode}";
                 log.LogInformation($"Calling Function Group endpoint: {callUrl}");
 
                 var result = await _httpClient.GetAsync(callUrl);

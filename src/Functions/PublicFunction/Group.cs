@@ -10,6 +10,8 @@ using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
+using Azure.Identity;
+using Azure.Security.KeyVault.Secrets;
 
 namespace PublicFunction
 {
@@ -60,11 +62,17 @@ namespace PublicFunction
                     await response.WriteStringAsync($"Storage content: {text}");
                     break;
                 }
-        
                 case "keyvault":
-                    await response.WriteStringAsync("Group API → keyvault logic placeholder.");
+                {
+                    string vaultUrl = Environment.GetEnvironmentVariable("KeyVaultUrl");   // e.g., https://kv-week2-hema.vault.azure.net/
+                    string secretName = "demo-secret";
+                
+                    var client = new SecretClient(new Uri(vaultUrl), new DefaultAzureCredential());
+                    KeyVaultSecret secret = await client.GetSecretAsync(secretName);
+                
+                    await response.WriteStringAsync($"Group API → KeyVault value: {secret.Value}");
                     break;
-        
+                }
                 default:
                     await response.WriteStringAsync("Group API → unknown mode. Use ?mode=static|storage|keyvault.");
                     break;

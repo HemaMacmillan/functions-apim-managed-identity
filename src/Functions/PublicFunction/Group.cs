@@ -24,12 +24,38 @@ namespace PublicFunction
 
         [Function("group")]
         public async Task<HttpResponseData> Run(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "get")] HttpRequestData req,
-        FunctionContext context)
+            [HttpTrigger(AuthorizationLevel.Anonymous, "get")] HttpRequestData req,
+            FunctionContext context)
         {
+            var log = context.GetLogger("group");
+        
+            // Extract query parameter
+            var query = System.Web.HttpUtility.ParseQueryString(req.Url.Query);
+            string mode = query["mode"]?.ToLower();
+        
             var response = req.CreateResponse(System.Net.HttpStatusCode.OK);
-            await response.WriteStringAsync("Group static response working.");
+        
+            switch (mode)
+            {
+                case "static":
+                    await response.WriteStringAsync("Group API → static response.");
+                    break;
+        
+                case "storage":
+                    await response.WriteStringAsync("Group API → storage logic placeholder.");
+                    break;
+        
+                case "keyvault":
+                    await response.WriteStringAsync("Group API → keyvault logic placeholder.");
+                    break;
+        
+                default:
+                    await response.WriteStringAsync("Group API → unknown mode. Use ?mode=static|storage|keyvault.");
+                    break;
+            }
+        
             return response;
         }
+
     }
 }

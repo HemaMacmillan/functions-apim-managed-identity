@@ -8,6 +8,8 @@ using Azure.Identity;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
+using Azure.Storage.Blobs;
+using Azure.Storage.Blobs.Models;
 
 namespace PublicFunction
 {
@@ -42,8 +44,22 @@ namespace PublicFunction
                     break;
         
                 case "storage":
-                    await response.WriteStringAsync("Group API → storage logic placeholder.");
+                {
+                    var accountName = Environment.GetEnvironmentVariable("StorageAccountName");
+                    var containerName = Environment.GetEnvironmentVariable("BlobContainerName");
+                    var blobName = Environment.GetEnvironmentVariable("BlobName");
+            
+                    var uri = new Uri($"https://{accountName}.blob.core.windows.net/{containerName}/{blobName}");
+            
+                    var credential = new DefaultAzureCredential();
+                    var client = new BlobClient(uri, credential);
+            
+                    var download = await client.DownloadContentAsync();
+                    var text = download.Value.Content.ToString();
+            
+                    await response.WriteStringAsync($"Storage content: {text}");
                     break;
+                }
         
                 case "keyvault":
                     await response.WriteStringAsync("Group API → keyvault logic placeholder.");

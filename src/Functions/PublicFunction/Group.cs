@@ -10,7 +10,6 @@ using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
-using Azure.Identity;
 using Azure.Security.KeyVault.Secrets;
 
 namespace PublicFunction

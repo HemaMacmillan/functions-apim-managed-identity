@@ -35,6 +35,8 @@ namespace PublicFunction
             string apimKey = Environment.GetEnvironmentVariable("ApimKey");
             string clientId = Environment.GetEnvironmentVariable("ClientId");
             string targetAppUri = Environment.GetEnvironmentVariable("TargetAppUri");
+            string funcUrl = Environment.GetEnvironmentVariable("FunctionBaseURL");
+            
 
             // ----------------------------
             // TEST MODE (NO APIM CONFIG)
@@ -79,8 +81,8 @@ namespace PublicFunction
                 _httpClient.DefaultRequestHeaders.Add("Ocp-Apim-Subscription-Key", apimKey);
 
                 //string callUrl = $"{apimUrl}/trusted-simple/test";
-                //string callUrl = $"{apimUrl}/simple";
-                string callUrl = "https://func-apim-mi-week2-dbdgcba2hrffdbcx.eastus-01.azurewebsites.net/api/group";
+                string callUrl = $"{funcUrl}/api/group";
+                //string callUrl = "https://func-apim-mi-week2-dbdgcba2hrffdbcx.eastus-01.azurewebsites.net/api/group";
                 log.LogInformation($"Calling Function Group endpoint: {callUrl}");
 
                 var result = await _httpClient.GetAsync(callUrl);
